@@ -85,6 +85,8 @@
     backdrop-filter:blur(20px) saturate(1.15);animation:pop .16s ease}
   @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:none}}
   .panel.hide{display:none}
+  .panel.below{top:calc(100% + 8px);bottom:auto;animation:popDown .16s ease}
+  @keyframes popDown{from{opacity:0;transform:translateY(-6px) scale(.99)}to{opacity:1;transform:none}}
 
   .head{display:flex;align-items:flex-start;gap:10px;padding:14px 14px 10px}
   .head h1{margin:0;font-size:14px;font-weight:700;letter-spacing:.2px;color:var(--txt)}
@@ -255,26 +257,56 @@
     });
   }
 
-  /* ---------- 拖拽（位置存 localStorage，纯 UI 状态） ---------- */
+  /* ---------- 拖拽 + 点击（位置存 localStorage，纯 UI 状态） ---------- */
+  function togglePanel() {
+    state.collapsed = !state.collapsed;
+    panel.classList.toggle("hide", state.collapsed);
+    if (!state.collapsed) { positionPanel(); render(); }
+  }
+
+  /* 胶囊靠近视口顶部时，面板改为向下展开，避免点开却看不见 */
+  function positionPanel() {
+    var r = wrap.getBoundingClientRect();
+    var need = Math.min(window.innerHeight * 0.8, 680);
+    var roomAbove = r.top - 12;
+    var roomBelow = window.innerHeight - r.bottom - 12;
+    panel.classList.toggle("below", roomAbove < need && roomBelow > roomAbove);
+  }
+
   (function enableDrag() {
-    var dragging = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0, dragEndedAt = 0;
+    var dragging = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0;
 
     try {
       var saved = JSON.parse(localStorage.getItem(POS_KEY) || "null");
-      if (saved && typeof saved.x === "number") { wrap.style.right = "auto"; wrap.style.left = saved.x + "px"; wrap.style.top = saved.y + "px"; wrap.style.bottom = "auto"; }
+      if (saved && typeof saved.x === "number") {
+        var sx0 = Math.min(Math.max(8, saved.x), Math.max(8, window.innerWidth - 140));
+        var sy0 = Math.min(Math.max(8, saved.y), Math.max(8, window.innerHeight - 44));
+        wrap.style.right = "auto"; wrap.style.left = sx0 + "px";
+        wrap.style.top = sy0 + "px"; wrap.style.bottom = "auto";
+      }
     } catch (e) {}
 
-    pill.addEventListener("mousedown", function (e) {
+    window.addEventListener("resize", function () {
+      if (wrap.style.left) {
+        var x = Math.min(Math.max(8, parseFloat(wrap.style.left) || 8), Math.max(8, window.innerWidth - wrap.offsetWidth - 8));
+        var y = Math.min(Math.max(8, parseFloat(wrap.style.top) || 8), Math.max(8, window.innerHeight - 44));
+        wrap.style.left = x + "px"; wrap.style.top = y + "px";
+      }
+      if (!state.collapsed) positionPanel();
+    });
+
+    pill.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0) return;
       dragging = true; moved = false;
       var r = wrap.getBoundingClientRect();
       sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
-      e.preventDefault();
+      try { pill.setPointerCapture(e.pointerId); } catch (err) {}
     });
 
-    window.addEventListener("mousemove", function (e) {
+    pill.addEventListener("pointermove", function (e) {
       if (!dragging) return;
       var dx = e.clientX - sx, dy = e.clientY - sy;
-      if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 6) moved = true;
       if (!moved) return;
       var x = Math.min(Math.max(8, ox + dx), window.innerWidth - wrap.offsetWidth - 8);
       var y = Math.min(Math.max(8, oy + dy), window.innerHeight - 44);
@@ -282,22 +314,19 @@
       wrap.style.left = x + "px"; wrap.style.top = y + "px";
     });
 
-    window.addEventListener("mouseup", function () {
+    pill.addEventListener("pointerup", function (e) {
       if (!dragging) return;
       dragging = false;
-      dragEndedAt = Date.now();
+      try { pill.releasePointerCapture(e.pointerId); } catch (err) {}
       if (moved) {
         var r = wrap.getBoundingClientRect();
-        try { localStorage.setItem(POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) })); } catch (e) {}
+        try { localStorage.setItem(POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) })); } catch (err) {}
+        return;
       }
+      togglePanel();
     });
 
-    pill.addEventListener("click", function () {
-      if (Date.now() - dragEndedAt < 250) return;
-      state.collapsed = !state.collapsed;
-      panel.classList.toggle("hide", state.collapsed);
-      if (!state.collapsed) render();
-    });
+    pill.addEventListener("pointercancel", function () { dragging = false; });
   })();
 
   /* ---------- 数据 ---------- */
@@ -577,7 +606,7 @@
     return alert + renderOverview(c);
   }
 
-  function render() {
+  function renderInner() {
     renderPill();
     if (state.collapsed) { panel.classList.add("hide"); return; }
     panel.classList.remove("hide");
@@ -597,6 +626,18 @@
       "</span></div>";
 
     bindPanelEvents();
+  }
+
+  function render() {
+    try {
+      renderInner();
+    } catch (e) {
+      var msg = (e && e.message) || String(e);
+      pill.innerHTML = '<div class="logo">!</div><div class="pill-text"><span class="pill-k">面板错误</span>' +
+        '<span class="pill-d">' + esc(msg.slice(0, 60)) + "</span></div>";
+      pill.title = msg;
+      try { console.error("[MC下载面板分析]", e); } catch (err) {}
+    }
   }
 
   function bindPanelEvents() {
