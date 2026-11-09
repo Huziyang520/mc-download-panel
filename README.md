@@ -11,7 +11,7 @@ Chrome / Edge 扩展（Manifest V3）。在 CurseForge 作者后台（`authors.c
 ## 使用
 
 1. 打开 <https://authors.curseforge.com/dashboard/projects>
-2. 点右下角胶囊展开面板，首次使用时填入 CurseForge 用户名或作者 ID（例如 `Huziyang520` 或 `141592671`）
+2. 点右下角胶囊展开面板，首次使用时填入自己的 CurseForge 用户名或作者 ID
 3. 面板自动同步项目数据；之后每 6 小时或手动点刷新时更新
 
 三个页签：

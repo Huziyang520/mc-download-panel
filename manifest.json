@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MC 下载面板分析",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "在 CurseForge 作者后台展示各项目总下载量、每日增长与更新优先级、MC 版本适配分析。",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
