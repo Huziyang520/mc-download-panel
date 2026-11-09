@@ -603,6 +603,9 @@
         ? '<div class="hint" style="margin-top:10px">已积累 ' + Object.keys(d.days || {}).length + " 天快照 · 上次同步 " +
           (d.lastRefresh ? new Date(d.lastRefresh).toLocaleString("zh-CN", { hour12: false }) : "从未") + "</div>"
         : "") +
+      (author
+        ? '<div style="margin-top:10px"><button class="btn ghost" id="cfd-reset" style="padding:6px 10px;font-size:11px">清空本地快照并重新同步</button></div>'
+        : "") +
       '<div class="hint">数据来自 cfwidget（CurseForge 公开数据的第三方镜像），总量与作者后台可能有几个小时延迟。<br>' +
       "「昨日增长」需要至少两天快照，首次同步后第二天才会出现。</div></div>";
   }
@@ -693,6 +696,21 @@
 
     var retry = shadow.getElementById("cfd-retry");
     if (retry) retry.onclick = function () { state.mode = "loading"; load(true); };
+
+    var resetBtn = shadow.getElementById("cfd-reset");
+    if (resetBtn) resetBtn.onclick = function () {
+      if (!window.confirm("清空本地快照并重新同步？历史增长数据会丢失。")) return;
+      state.busy = true;
+      render();
+      send({ type: "cfd:reset" }).then(function (res) {
+        state.busy = false;
+        if (!res.ok) { state.error = res.error || "清空失败"; render(); return; }
+        state.error = "";
+        state.mode = "main";
+        load(true);
+        startPolling();
+      });
+    };
 
     shadow.querySelectorAll("[data-tab]").forEach(function (b) {
       b.onclick = function () { state.tab = b.getAttribute("data-tab"); render(); };

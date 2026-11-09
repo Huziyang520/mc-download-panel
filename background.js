@@ -105,6 +105,23 @@ async function resolveAuthor(q) {
   return { id: String(data.id), name: data.username || name };
 }
 
+/* 只保留属于当前作者的项目与其快照 */
+function pruneToAuthor(state, ids) {
+  const keep = new Set(ids.map(String));
+  const projects = state.projects || {};
+  for (const id of Object.keys(projects)) {
+    if (!keep.has(id)) delete projects[id];
+  }
+  const days = state.days || {};
+  for (const dayKey of Object.keys(days)) {
+    const day = days[dayKey];
+    for (const id of Object.keys(day)) {
+      if (!keep.has(id)) delete day[id];
+    }
+    if (!Object.keys(day).length) delete days[dayKey];
+  }
+}
+
 function projectFromDetail(d) {
   const files = Array.isArray(d.files) ? d.files : [];
   const versions = {};
@@ -171,6 +188,9 @@ async function refresh(opts) {
       state.author = { id: String(author.id), name: author.username || state.author.name };
       const ids = author.projects.map((p) => String(p.id));
       progress.total = ids.length;
+
+      // 换作者/项目被删后，清掉不属于当前作者的项目与快照，避免两个人的数据混在一起
+      pruneToAuthor(state, ids);
 
       const details = await mapLimit(ids, CONCURRENCY, async (id) => {
         try {
@@ -241,6 +261,12 @@ if (hasChrome) {
         if (msg.type === "cfd:setup") {
           const author = await resolveAuthor(msg.author);
           const state = await readState();
+          const changed = !state.author || String(state.author.id) !== String(author.id);
+          if (changed) {
+            // 换作者：旧作者的快照与项目不再适用，直接重置
+            state.projects = {};
+            state.days = {};
+          }
           state.author = author;
           state.lastRefresh = 0;
           await writeState(state);
@@ -254,9 +280,14 @@ if (hasChrome) {
         }
 
         if (msg.type === "cfd:reset") {
-          await chrome.storage.local.remove(KEY);
+          const state = await readState();
+          state.projects = {};
+          state.days = {};
+          state.lastRefresh = 0;
+          await writeState(state);
           progress = { running: false, done: 0, total: 0, error: null };
           lastError = null;
+          if (state.author && state.author.id) startRefresh(true);
           return sendResponse({ ok: true });
         }
 
@@ -289,5 +320,5 @@ if (hasChrome) {
 }
 
 if (typeof module === "object" && module.exports) {
-  module.exports = { projectFromDetail, publicState, resolveAuthor, refresh, localDayKey };
+  module.exports = { projectFromDetail, publicState, resolveAuthor, refresh, localDayKey, pruneToAuthor };
 }
