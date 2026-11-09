@@ -279,6 +279,14 @@ if (hasChrome) {
           return sendResponse({ ok: true, progress });
         }
 
+        if (msg.type === "cfd:storage") {
+          let bytes = 0;
+          try {
+            bytes = await chrome.storage.local.getBytesInUse(null);
+          } catch (e) {}
+          return sendResponse({ ok: true, id: chrome.runtime.id, bytes });
+        }
+
         if (msg.type === "cfd:reset") {
           const state = await readState();
           state.projects = {};

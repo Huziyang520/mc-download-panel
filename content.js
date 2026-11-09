@@ -20,7 +20,8 @@
     error: "",
     busy: false,
     collapsed: true,
-    setupValue: ""
+    setupValue: "",
+    storage: null
   };
 
   var pollTimer = null;
@@ -198,6 +199,12 @@
   .setup p{font-size:12px;color:var(--txt3);line-height:1.65;margin:0 0 12px}
   .setup .hint{font-size:10.5px;color:var(--txt4);margin-top:9px;line-height:1.6}
   .err{margin-top:9px;font-size:11px;color:var(--neg)}
+  .store{margin-top:12px;padding:10px 11px;border-radius:10px;background:var(--card);border:1px solid var(--card-b)}
+  .store-t{font-size:11px;font-weight:600;color:var(--txt2);margin-bottom:6px}
+  .store-l{font-size:10.5px;color:var(--txt3);line-height:1.7;word-break:break-all}
+  .store-l code{font-family:ui-monospace,Consolas,monospace;font-size:10px;color:var(--txt2);
+    background:var(--track);padding:1px 4px;border-radius:4px}
+  .store .btn{margin-top:8px;padding:5px 10px;font-size:11px}
   .foot{padding:9px 14px 11px;border-top:1px solid var(--line-soft);
     font-size:10px;color:var(--txt3);display:flex;justify-content:space-between;gap:8px}
   .foot a{color:var(--txt3);text-decoration:none}
@@ -335,6 +342,12 @@
 
   /* ---------- 数据 ---------- */
   function load(initial) {
+    send({ type: "cfd:storage" }).then(function (r) {
+      if (r && r.ok && r.id) {
+        state.storage = r;
+        if (state.mode === "setup") render();
+      }
+    });
     send({ type: "cfd:get" }).then(function (res) {
       if (!res.ok) { state.mode = "error"; state.error = res.error || "读取失败"; render(); return; }
       state.data = res.state;
@@ -585,6 +598,24 @@
     return html;
   }
 
+  function storageBlock() {
+    var st = state.storage;
+    if (!st || !st.id) return "";
+    var isEdge = /Edg\//.test(navigator.userAgent);
+    var base = isEdge
+      ? "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data"
+      : "%LOCALAPPDATA%\\Google\\Chrome\\User Data";
+    var path = base + "\\<配置文件>\\Local Extension Settings\\" + st.id;
+    var kb = st.bytes ? Math.max(1, Math.round(st.bytes / 1024)) : 0;
+    return '<div class="store"><div class="store-t">数据存放位置</div>' +
+      '<div class="store-l">扩展 ID：<code>' + esc(st.id) + "</code></div>" +
+      '<div class="store-l">目录：<code>' + esc(path) + "</code></div>" +
+      '<div class="store-l">占用 ' + (kb ? kb + " KB" : "—") + " · " + (isEdge ? "Edge" : "Chrome") + "</div>" +
+      '<button class="btn ghost" id="cfd-copy" data-path="' + esc(path) + '">复制目录</button>' +
+      '<div class="hint" style="margin-top:8px">这是浏览器的 LevelDB 目录，不要手动改文件。<code>&lt;配置文件&gt;</code> 是 Default 或 Profile 1，在 chrome://version 的「个人资料路径」里能看到；备份整个目录即可带走历史快照。</div>' +
+      "</div>";
+  }
+
   function renderSetup() {
     var d = state.data || {};
     var author = d.author;
@@ -607,7 +638,8 @@
         ? '<div style="margin-top:10px"><button class="btn ghost" id="cfd-reset" style="padding:6px 10px;font-size:11px">清空本地快照并重新同步</button></div>'
         : "") +
       '<div class="hint">数据来自 cfwidget（CurseForge 公开数据的第三方镜像），总量与作者后台可能有几个小时延迟。<br>' +
-      "「昨日增长」需要至少两天快照，首次同步后第二天才会出现。</div></div>";
+      "「昨日增长」需要至少两天快照，首次同步后第二天才会出现。</div>" +
+      storageBlock() + "</div>";
   }
 
   function renderBody() {
@@ -696,6 +728,22 @@
 
     var retry = shadow.getElementById("cfd-retry");
     if (retry) retry.onclick = function () { state.mode = "loading"; load(true); };
+
+    var copyBtn = shadow.getElementById("cfd-copy");
+    if (copyBtn) copyBtn.onclick = function () {
+      var text = copyBtn.getAttribute("data-path") || "";
+      var restore = function () { copyBtn.textContent = "复制目录"; };
+      var done = function () { copyBtn.textContent = "已复制"; setTimeout(restore, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {
+          copyBtn.textContent = "复制失败，请手动选中";
+          setTimeout(restore, 1800);
+        });
+      } else {
+        copyBtn.textContent = "请手动选中复制";
+        setTimeout(restore, 1800);
+      }
+    };
 
     var resetBtn = shadow.getElementById("cfd-reset");
     if (resetBtn) resetBtn.onclick = function () {

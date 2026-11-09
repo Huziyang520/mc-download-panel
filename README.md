@@ -31,6 +31,15 @@ Chrome / Edge 扩展（Manifest V3）。在 CurseForge 作者后台（`authors.c
 - 首次安装当天没有历史快照，所以「昨日增长」从第二天开始出现
 - cfwidget 有缓存，数字与 CurseForge 后台可能有几小时偏差
 
+## 数据存放位置
+
+快照保存在浏览器的 `chrome.storage.local`（LevelDB），面板设置页会显示扩展 ID、所在目录和占用大小，并可一键复制目录。
+
+- Chrome：`%LOCALAPPDATA%\Google\Chrome\User Data\<配置文件>\Local Extension Settings\<扩展 ID>\`
+- Edge：`%LOCALAPPDATA%\Microsoft\Edge\User Data\<配置文件>\Local Extension Settings\<扩展 ID>\`
+
+`<配置文件>` 一般是 `Default`，多账号时是 `Profile 1` 等，可在 `chrome://version` 的「个人资料路径」确认。备份这个目录即可保留历史快照；不要手动编辑里面的文件。
+
 ## 指标口径
 
 - 更新优先级 = 45% 近 7 日相对增速 + 30% 距上次发布天数（90 天封顶）+ 25% 最新 MC 版本缺口
