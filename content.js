@@ -139,6 +139,10 @@
   .row-num{text-align:right;flex:0 0 auto;min-width:66px}
   .row-total{font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--txt)}
   .row-delta{font-size:10.5px;font-variant-numeric:tabular-nums;margin-top:1px}
+  .row-deltas{display:flex;gap:10px;margin-top:3px;font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dl{display:inline-flex;align-items:baseline;gap:3px}
+  .dl i{font-style:normal;font-size:9.5px;color:var(--txt4)}
+  .dl.up{color:var(--pos)}.dl.down{color:var(--neg)}.dl.flat{color:var(--txt4)}
 
   .sorts{display:flex;gap:6px;margin-bottom:8px}
   .chip{padding:4px 9px;border-radius:999px;border:1px solid var(--line);
@@ -498,19 +502,30 @@
     var sub;
     if (mode === "delta1") sub = r.lastUpload ? "最近更新 " + r.lastUpload.slice(5, 10) : "尚无文件";
     else sub = (r.fileCount || 0) + " 个文件" + (r.lastUpload ? " · " + r.lastUpload.slice(0, 10) : "") + (r.staleDays !== null && r.staleDays > 60 ? " · " + r.staleDays + " 天未更新" : "");
-    var right =
-      '<div class="row-total">' + S.formatNumber(r.total) + "</div>" +
-      '<div class="row-delta ' + (r.delta1 === null ? "flat" : cls(r.delta1)) + '">' +
-      (r.delta1 === null ? "—" : S.formatSigned(r.delta1) + (r.pct1 !== null ? " · " + S.formatPct(r.pct1) : "")) + "</div>";
+
+    function delta(tag, v, pct) {
+      var c = v === null ? "flat" : cls(v);
+      var txt = v === null ? "—" : S.formatSigned(v);
+      var tip = v === null ? tag + "增长需要更多天快照" : tag + "增长 " + S.formatSigned(v) + (pct !== null && pct !== undefined ? "（" + S.formatPct(pct) + "）" : "");
+      return '<span class="dl ' + c + '" title="' + esc(tip) + '"><i>' + tag + "</i>" + esc(txt) + "</span>";
+    }
+
+    var deltas = '<div class="row-deltas">' +
+      delta("昨日", r.delta1, r.pct1) +
+      delta("7日", r.delta7, r.pct7) +
+      delta("30日", r.delta30, r.pct30) +
+      "</div>";
+
     var name = r.url
       ? '<a href="' + esc(r.url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">' + esc(r.name) + "</a>"
       : esc(r.name);
-    return '<div class="row">' + thumb + '<div class="row-main"><div class="row-name">' + name + '</div><div class="row-sub">' + esc(sub) + "</div></div>" +
-      '<div class="row-num">' + right + "</div></div>";
+    return '<div class="row">' + thumb +
+      '<div class="row-main"><div class="row-name">' + name + '</div><div class="row-sub">' + esc(sub) + "</div>" + deltas + "</div>" +
+      '<div class="row-num"><div class="row-total">' + S.formatNumber(r.total) + "</div></div></div>";
   }
 
   function renderProjects(c) {
-    var keys = [["total", "总下载"], ["d1", "昨日"], ["d7", "7 日"], ["stale", "最久未更"]];
+    var keys = [["total", "总下载"], ["d1", "昨日"], ["d7", "7 日"], ["d30", "30 日"], ["stale", "最久未更"]];
     var chips = keys.map(function (k) {
       return '<button class="chip' + (state.sortKey === k[0] ? " on" : "") + '" data-sort="' + k[0] + '">' + k[1] + "</button>";
     }).join("");
@@ -521,6 +536,7 @@
       if (k === "stale") { va = a.staleDays === null ? -1 : a.staleDays; vb = b.staleDays === null ? -1 : b.staleDays; }
       else if (k === "d1") { va = a.delta1 === null ? -1e9 : a.delta1; vb = b.delta1 === null ? -1e9 : b.delta1; }
       else if (k === "d7") { va = a.delta7 === null ? -1e9 : a.delta7; vb = b.delta7 === null ? -1e9 : b.delta7; }
+      else if (k === "d30") { va = a.delta30 === null ? -1e9 : a.delta30; vb = b.delta30 === null ? -1e9 : b.delta30; }
       else { va = a.total; vb = b.total; }
       return (va - vb) * state.sortDir;
     });
