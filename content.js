@@ -140,6 +140,8 @@
   .tag.t2{background:rgba(255,255,255,.07);color:#9aa3b6}
 
   .note{font-size:10.5px;color:#6f7688;line-height:1.55;margin-top:10px}
+  .alert{margin-bottom:10px;padding:8px 10px;border-radius:9px;background:rgba(255,107,107,.12);
+    border:1px solid rgba(255,107,107,.28);color:#ffb3b3;font-size:11px;line-height:1.5}
   .empty{padding:26px 10px;text-align:center;color:#8b93a5;font-size:12px;line-height:1.7}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;
     border-radius:10px;border:0;cursor:pointer;font-size:12.5px;font-weight:600;color:#fff;
@@ -261,6 +263,15 @@
       state.data = res.state;
       if (!res.state.author) state.mode = "setup";
       else state.mode = "main";
+      if (!res.state.author) {
+        // 未配置时自动展开一次，避免只看到胶囊不知道要点
+        try {
+          if (!sessionStorage.getItem("cfdash:autoopened")) {
+            sessionStorage.setItem("cfdash:autoopened", "1");
+            state.collapsed = false;
+          }
+        } catch (e) {}
+      }
       render();
       if (res.state.progress && res.state.progress.running) startPolling();
       else if (initial && res.state.author) maybeRefresh();
@@ -302,7 +313,10 @@
   function submitSetup() {
     var input = shadow.getElementById("cfd-input");
     var v = input ? input.value.trim() : "";
-    if (!v) { state.error = "请填写用户名或作者 ID"; render(); return; }
+    if (!v) {
+      if (state.data && state.data.author) v = state.data.author.id;
+      else { state.error = "请填写用户名或作者 ID"; render(); return; }
+    }
     state.error = "";
     state.busy = true;
     render();
@@ -318,17 +332,31 @@
   /* innerHTML 仅用于本文件的静态模板；所有来自 cfwidget 的字符串先经 esc() 转义。 */
   function renderPill() {
     var d = state.data;
+    var p = (d && d.progress) || {};
+    var noAuthor = !d || !d.author;
     var total = 0, delta = null;
-    if (d) {
+    if (d && d.author) {
       var c = S.compute(d, Date.now());
       total = c.totals.today || 0;
       delta = c.totals.d1;
     }
-    var sub = delta === null ? "等待数据" : S.formatSigned(delta) + " 昨日";
+
+    var main, sub, tone = "";
+    if (state.mode === "error") { main = "面板错误"; sub = "点开查看原因"; }
+    else if (noAuthor) { main = "未设置"; sub = "点开填写作者名"; }
+    else if (p.running) { main = "同步中"; sub = (p.done || 0) + " / " + (p.total || "?"); }
+    else if (!total) { main = "无数据"; sub = "点开检查"; }
+    else {
+      main = S.formatNumber(total);
+      if (delta === null) sub = "待次日快照";
+      else { sub = S.formatSigned(delta) + " 昨日"; tone = cls(delta); }
+    }
+
     pill.innerHTML =
       '<div class="logo">M</div>' +
-      '<div class="pill-text"><span class="pill-k">' + (total ? S.formatNumber(total) : "下载分析") + "</span>" +
-      '<span class="pill-d ' + (delta === null ? "" : cls(delta)) + '">' + esc(sub) + "</span></div>";
+      '<div class="pill-text"><span class="pill-k">' + esc(main) + "</span>" +
+      '<span class="pill-d ' + tone + '">' + esc(sub) + "</span></div>";
+    pill.title = noAuthor ? "未设置 CurseForge 作者名，点开填写" : "打开下载分析面板";
   }
 
   function renderHead() {
@@ -477,9 +505,14 @@
       '<input id="cfd-input" placeholder="例如 Huziyang520 或 141592671" value="' + esc(state.setupValue || "") + '" spellcheck="false">' +
       (state.error ? '<div class="err">' + esc(state.error) + "</div>" : "") +
       '<div style="display:flex;gap:8px;margin-top:12px">' +
-      '<button class="btn" id="cfd-save"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? "解析中…" : "开始同步") + "</button>" +
+      '<button class="btn" id="cfd-save"' + (state.busy ? " disabled" : "") + ">" +
+      (state.busy ? "解析中…" : author && !state.setupValue ? "重新同步当前作者" : "开始同步") + "</button>" +
       (author ? '<button class="btn ghost" id="cfd-back">返回面板</button>' : "") +
       "</div>" +
+      (author
+        ? '<div class="hint" style="margin-top:10px">已积累 ' + Object.keys(d.days || {}).length + " 天快照 · 上次同步 " +
+          (d.lastRefresh ? new Date(d.lastRefresh).toLocaleString("zh-CN", { hour12: false }) : "从未") + "</div>"
+        : "") +
       '<div class="hint">数据来自 cfwidget（CurseForge 公开数据的第三方镜像），总量与作者后台可能有几个小时延迟。<br>' +
       "「昨日增长」需要至少两天快照，首次同步后第二天才会出现。</div></div>";
   }
@@ -489,10 +522,14 @@
     if (state.mode === "setup") return renderSetup();
     if (state.mode === "error") return '<div class="empty">' + esc(state.error || "出错了") + '<br><br><button class="btn ghost" id="cfd-retry">重试</button></div>';
 
+    var p = (state.data && state.data.progress) || {};
+    var err = state.error || (state.data && state.data.error);
+    var alert = err && !p.running ? '<div class="alert">' + esc(err) + "</div>" : "";
+
     var c = S.compute(state.data, Date.now());
-    if (state.tab === "projects") return renderProjects(c);
-    if (state.tab === "analysis") return renderAnalysis(c);
-    return renderOverview(c);
+    if (state.tab === "projects") return alert + renderProjects(c);
+    if (state.tab === "analysis") return alert + renderAnalysis(c);
+    return alert + renderOverview(c);
   }
 
   function render() {
